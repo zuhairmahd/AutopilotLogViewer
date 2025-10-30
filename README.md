@@ -209,9 +209,30 @@ Autopilot.LogViewer.UI
 ```
 
 ### Target Frameworks
-- **Autopilot.LogCore**: netstandard2.0, net9.0 (multi-target)
-- **Autopilot.LogViewer.Core**: netstandard2.0, net9.0 (multi-target)
+- **Autopilot.LogCore**: net9.0
+- **Autopilot.LogViewer.Core**: net9.0
 - **Autopilot.LogViewer.UI**: net9.0-windows (WPF)
+
+Note: We removed legacy netstandard2.0 targets to avoid NuGet restore issues in offline environments. All active projects now target .NET 9 for a simpler, faster build.
+
+### Unused code cleaned up
+Only three projects are required and included in the solution:
+
+```
+Autopilot.LogViewer.UI → Autopilot.LogViewer.Core → Autopilot.LogCore
+```
+
+The following folders under `src/` are not used by the application and can be deleted safely if you want a minimal tree:
+
+- `Autopilot.CacheCore/`
+- `Autopilot.CollectionCore/`
+- `Autopilot.ConfigCore/`
+- `Autopilot.CsvCore/`
+- `Autopilot.DeviceCore/`
+- `Autopilot.GraphCore/`
+- `Autopilot.StringCore/`
+
+They were never referenced by the solution and are retained only for archival purposes.
 
 ## Integration with Main Autopilot Repository
 
