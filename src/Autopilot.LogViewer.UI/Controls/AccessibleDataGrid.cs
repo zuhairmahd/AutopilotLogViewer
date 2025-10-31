@@ -104,9 +104,13 @@ namespace Autopilot.LogViewer.UI.Controls
             UpdateAllCellAutomationNames();
             UpdateHeaderAutomationProperties();
 
+            // Force a headers presenter rebuild by toggling HeadersVisibility
+            ForceHeaderRebuild();
+
             // Defer a second pass until after layout so newly realized cells get automation metadata
             Dispatcher.BeginInvoke(new Action(() =>
             {
+                ForceHeaderRebuild();
                 InvalidateHeaderPeers();
                 UpdateAllRowAccessibleNames();
                 UpdateAllCellAutomationNames();
@@ -122,14 +126,49 @@ namespace Autopilot.LogViewer.UI.Controls
             UpdateAllCellAutomationNames();
             UpdateHeaderAutomationProperties();
 
+            // Force a headers presenter rebuild by toggling HeadersVisibility
+            ForceHeaderRebuild();
+
             // Defer a second pass until after layout so newly realized cells get automation metadata
             Dispatcher.BeginInvoke(new Action(() =>
             {
+                ForceHeaderRebuild();
                 InvalidateHeaderPeers();
                 UpdateAllRowAccessibleNames();
                 UpdateAllCellAutomationNames();
                 UpdateHeaderAutomationProperties();
             }), DispatcherPriority.Background);
+        }
+
+        /// <summary>
+        /// Forces WPF to recreate the header containers and their automation peers by
+        /// toggling HeadersVisibility. This addresses stubborn cases where the first
+        /// header remains non-focusable after a column is unhidden.
+        /// </summary>
+        private void ForceHeaderRebuild()
+        {
+            try
+            {
+                // Remember current setting
+                var current = HeadersVisibility;
+
+                // Temporarily hide, update layout, then restore
+                HeadersVisibility = DataGridHeadersVisibility.None;
+                UpdateLayout();
+
+                HeadersVisibility = (current & DataGridHeadersVisibility.Column) != 0
+                    ? DataGridHeadersVisibility.Column
+                    : current; // restore as-is if rows were part of visibility
+
+                UpdateLayout();
+
+                // Notify UIA of structure change
+                InvalidateHeaderPeers();
+            }
+            catch
+            {
+                // Non-fatal fallback
+            }
         }
 
         private void AttachColumnPropertyHandlers(System.Collections.IList? columns = null)
@@ -348,6 +387,11 @@ namespace Autopilot.LogViewer.UI.Controls
             }
         }
 
+        /// <summary>
+        /// Notifies UI Automation that the header structure has changed.
+        /// This is critical for screen readers to rebuild their column index after show/hide.
+        /// Per Microsoft docs: Use StructureChanged event for structural changes (not InvalidatePeer).
+        /// </summary>
         private void InvalidateHeaderPeers()
         {
             try
@@ -358,15 +402,27 @@ namespace Autopilot.LogViewer.UI.Controls
                     return;
                 }
 
-                // Force peer refresh by calling InvalidatePeer on each header
-                var headerContainers = FindVisualChildren<DataGridColumnHeader>(headersPresenter).ToList();
-                foreach (var header in headerContainers)
+                // Get the presenter's automation peer (parent of all header peers)
+                var presenterPeer = System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(headersPresenter);
+                if (presenterPeer == null)
                 {
-                    var peer = System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(header);
-                    if (peer != null)
+                    presenterPeer = System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(headersPresenter);
+                }
+
+                if (presenterPeer != null)
+                {
+                    // Raise StructureChanged event to notify screen readers
+                    // This tells UIA clients to re-query GetChildrenCore() and rebuild navigation
+                    if (System.Windows.Automation.Peers.AutomationPeer.ListenerExists(System.Windows.Automation.Peers.AutomationEvents.StructureChanged))
                     {
-                        peer.InvalidatePeer();
+                        presenterPeer.RaiseAutomationEvent(System.Windows.Automation.Peers.AutomationEvents.StructureChanged);
                     }
+
+                    // Also invalidate the presenter peer to recalculate its properties
+                    presenterPeer.InvalidatePeer();
+
+                    // Force re-query of children to flush cached peers
+                    _ = presenterPeer.GetChildren();
                 }
             }
             catch

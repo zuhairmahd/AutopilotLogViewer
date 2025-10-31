@@ -65,7 +65,7 @@
                                     Value="True"/>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding RecentFiles.Count}"
-                                        Value="0">
+                                             Value="0">
                                     <Setter Property="IsEnabled"
                                             Value="False"/>
                                 </DataTrigger>
@@ -126,6 +126,18 @@
                           Command="{Binding ResetColumnLayoutCommand}"
                           AutomationProperties.Name="Reset Column Layout"
                           AutomationProperties.HelpText="Reset column order and visibility to default settings"/>
+            </MenuItem>
+            <MenuItem Header="_Help"
+                      AutomationProperties.Name="Help Menu"
+                      AutomationProperties.HelpText="Open About dialog or view the README with known issues">
+                <MenuItem Header="_About"
+                          Click="About_Click"
+                          AutomationProperties.Name="About Dialog"
+                          AutomationProperties.HelpText="View application version and copyright information"/>
+                <MenuItem Header="Open _README"
+                          Click="OpenReadme_Click"
+                          AutomationProperties.Name="Open README"
+                          AutomationProperties.HelpText="Opens the README file which includes known issues and documentation"/>
             </MenuItem>
         </Menu>
 

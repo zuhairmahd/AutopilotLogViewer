@@ -73,8 +73,9 @@ namespace Autopilot.LogViewer.UI.Behaviors
                     SetOriginalDisplayIndex(column, column.DisplayIndex);
                 }
 
+                // Use Visibility.Collapsed as the primary hiding mechanism (Microsoft pattern)
+                // DO NOT set Width=0 as it interferes with UI Automation peer caching
                 column.Visibility = Visibility.Collapsed;
-                column.Width = new DataGridLength(0);
             }
         }
         #endregion

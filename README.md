@@ -270,6 +270,28 @@ git subtree push --prefix=AutopilotLogViewer \
 **Problem**: Screen reader not announcing elements  
 **Solution**: Ensure screen reader is running before launching the application
 
+## Known Issues
+
+### Header navigation after unhiding a column
+In some environments (intermittent with certain screen readers), after you unhide the first column (typically "Timestamp"), navigating the header row with arrow keys may behave unexpectedly:
+
+- Focus can move across other column headers
+- When moving to the just-unhidden first header, focus may jump to the first data cell in the second row
+- Pressing Up returns to the header row but lands on the second header rather than the first
+
+Status:
+- Body row navigation and announcement are correct
+- UI Automation properties (PositionInSet/SizeOfSet) are set correctly for headers and cells
+- We force a structural UIA refresh after column visibility changes, but some screen readers may cache header peers longer than expected
+
+Workarounds:
+- Press F5 to trigger a full accessibility refresh in the grid
+- Alternatively, briefly toggle a different column’s visibility off and on via the View menu to rebuild header peers
+
+Notes:
+- This does not affect reading the cell contents in body rows; only the header focus landing is impacted
+- We’re tracking this for a future fix; if you can reliably reproduce with a particular screen reader/version, please open an issue with details
+
 ## Documentation
 
 - [User Guide](docs/LOG_VIEWER_USER_GUIDE.md) - Comprehensive end-user documentation
