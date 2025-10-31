@@ -204,7 +204,7 @@ cp "$AUTOPILOT_REPO/docs/LOG_VIEWER_IMPLEMENTATION_SUMMARY.md" docs/
 ```bash
 # Copy the build script and README from the AutopilotLogViewer/ setup directory
 # (These should already exist if you followed this guide)
-cp "$AUTOPILOT_REPO/AutopilotLogViewer/Build-LogViewer.ps1" .
+cp "$AUTOPILOT_REPO/AutopilotLogViewer/build.bat" .
 cp "$AUTOPILOT_REPO/AutopilotLogViewer/README.md" .
 cp "$AUTOPILOT_REPO/AutopilotLogViewer/.gitignore" .
 
@@ -314,7 +314,7 @@ cd /c/Users/zuhai/code/Autopilot
 .\Build-NativeDlls.ps1 -Configuration Release
 
 # Build only LogViewer (using subtree build script)
-.\AutopilotLogViewer\Build-LogViewer.ps1 -Configuration Release
+.\AutopilotLogViewer\build.bat
 ```
 
 ### Building from Standalone LogViewer Repository
@@ -325,7 +325,7 @@ git clone https://github.com/yourusername/AutopilotLogViewer.git
 cd AutopilotLogViewer
 
 # Build
-.\Build-LogViewer.ps1 -Configuration Release
+build.bat
 ```
 
 Both methods produce the same output: `bin/Release/net9.0-windows/AutopilotLogViewer.exe`
@@ -425,7 +425,7 @@ Always test changes before pushing to the standalone repository:
 ```bash
 # Build and test in main Autopilot repository
 cd /c/Users/zuhai/code/Autopilot
-.\AutopilotLogViewer\Build-LogViewer.ps1 -Configuration Release
+.\AutopilotLogViewer\build.bat
 .\bin\Release\net9.0-windows\AutopilotLogViewer.exe
 
 # If tests pass, push to standalone repository
@@ -447,13 +447,13 @@ Keep documentation synchronized:
 | Add subtree (first time) | `git subtree add --prefix=AutopilotLogViewer <URL> main --squash` |
 | Pull updates | `git subtree pull --prefix=AutopilotLogViewer <URL> main --squash` |
 | Push changes | `git subtree push --prefix=AutopilotLogViewer <URL> main` |
-| Build LogViewer | `.\AutopilotLogViewer\Build-LogViewer.ps1 -Configuration Release` |
+| Build LogViewer | `.\AutopilotLogViewer\build.bat` |
 | Add remote alias | `git remote add logviewer <URL>` |
 
 ### Workflow Summary
 
 1. **Develop** in either repository (standalone or main Autopilot)
-2. **Build and test** using `Build-LogViewer.ps1`
+2. **Build and test** using `build.bat`
 3. **Commit** changes to the appropriate repository
 4. **Sync** using `git subtree pull` or `git subtree push`
 5. **Tag releases** in the standalone repository

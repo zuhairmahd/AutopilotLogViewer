@@ -36,6 +36,103 @@ param(
     [switch]$Clean
 )
 
+function SignScripts()
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Path,
+        [string[]]$Exclusions = @()
+    )
+    $functionName = $MyInvocation.MyCommand.Name
+    Write-Verbose "[$functionName] Got $($Path.Count) folders to sign."
+    $success = $false
+    $filesToSign = @()
+    foreach ($folder in $Path)
+    {
+        $files = @()
+        if (Test-Path $folder -PathType Leaf)
+        {
+            # A single file was provided
+            $ext = [System.IO.Path]::GetExtension($folder)
+            if ($ext -ieq '.exe' -or $ext -ieq '.dll') { $files += (Get-Item -Path $folder) }
+        }
+        elseif (Test-Path $folder -PathType Container)
+        {
+            # A directory was provided - collect .exe and .dll files (Filter accepts only a single pattern)
+            $exeFiles = Get-ChildItem -Path $folder -File -Filter *.exe -ErrorAction SilentlyContinue
+            if ($exeFiles) { $files += $exeFiles }
+            $dllFiles = Get-ChildItem -Path $folder -File -Filter *.dll -ErrorAction SilentlyContinue
+            if ($dllFiles) { $files += $dllFiles }
+        }
+
+        Write-Verbose "[$functionName] Signing $($files.Count) files in $folder and excluding $($Exclusions.Count) files."
+        if ($files.Count -gt 0)
+        {
+            Write-Host "Found $($files.Count) executable files in $folder"
+            foreach ($file in $files)
+            {
+                Write-Verbose "[$functionName] Processing file: $file"
+                if ($file.BaseName -in $Exclusions)
+                {
+                    Write-Verbose "[$functionName] Skipping $($file.BaseName) because it is in the exclusions list"
+                    continue
+                }
+                #Check if the file is already signed
+                $signature = Get-AuthenticodeSignature -FilePath $file.FullName -ErrorAction SilentlyContinue
+                Write-Verbose "[$functionName] The signature status is $($signature.Status)"
+                if ($signature.Status -ne 'Valid')
+                {
+                    Write-Verbose "[$functionName] $($file.FullName) is not signed."
+                    Write-Verbose "[$functionName] Adding the file to the list of files to sign."
+                    $filesToSign += $file.FullName
+                }
+                else
+                {
+                    Write-Verbose "[$functionName] $($file.FullName) is already signed."
+                }
+            }
+        }
+        else
+        {
+            Write-Host "No executable files found in $Path"
+        }
+    }
+    if ($filesToSign.Count -gt 0)
+    {
+        Write-Verbose "[$functionName] Signing $($filesToSign.Count) files..."
+        $filesToSign = $filesToSign -join ","
+        $params = @{
+            'Endpoint'               = 'https://eus.codesigning.azure.net/'
+            'CodeSigningAccountName' = 'zuhairmahd'
+            'CertificateProfileName' = 'Cert1'
+            'FileDigest'             = 'SHA256'
+            'TimestampRfc3161'       = 'http://timestamp.acs.microsoft.com'
+            'TimestampDigest'        = 'SHA256'
+            files                    = $filesToSign
+        }
+        Write-Verbose "[$functionName] Signing $($filesToSign.count) files."
+        try
+        {
+            Invoke-TrustedSigning @params
+            Write-Verbose "[$functionName] Signing process complete."
+            $success = $true
+        }
+        catch
+        {
+            $success = $false
+            Write-Host "An error occurred during the signing process."
+            Write-Error $_
+        }
+    }
+    else
+    {
+        Write-Host "No files to sign."
+        $success = $true
+    }
+    return $success
+}
+
 $ErrorActionPreference = 'Stop'
 
 Write-Verbose "Starting Autopilot Log Viewer Build"
@@ -232,6 +329,16 @@ Write-Host "========================================" -ForegroundColor Cyan
 
 if ($buildSuccess)
 {
+    if (SignScripts -path @($logCoreDllPath, $coreDllPath))
+    {
+        Write-Host "  [OK] Code signing completed" -ForegroundColor Green
+    }
+    else
+    {
+        Write-Host "  [WARNING] Code signing failed or skipped" -ForegroundColor Yellow                                         
+        exit 1
+    }
+
     Write-Host "  BUILD SUCCESSFUL" -ForegroundColor Green
     Write-Host "========================================`n" -ForegroundColor Cyan
     

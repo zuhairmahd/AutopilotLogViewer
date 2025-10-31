@@ -44,6 +44,36 @@
                           InputGestureText="Ctrl+O"
                           AutomationProperties.Name="Open Log File"
                           AutomationProperties.HelpText="Opens a log file for viewing"/>
+                <MenuItem Header="Open _Recent"
+                          AutomationProperties.Name="Open Recent Files"
+                          ItemsSource="{Binding RecentFiles}">
+                    <MenuItem.ItemContainerStyle>
+                        <Style TargetType="MenuItem">
+                            <Setter Property="Header"
+                                    Value="{Binding}"/>
+                            <Setter Property="Command"
+                                    Value="{Binding DataContext.OpenRecentFileCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            <Setter Property="CommandParameter"
+                                    Value="{Binding}"/>
+                            <Setter Property="ToolTip"
+                                    Value="{Binding}"/>
+                        </Style>
+                    </MenuItem.ItemContainerStyle>
+                    <MenuItem.Style>
+                        <Style TargetType="MenuItem">
+                            <Setter Property="IsEnabled"
+                                    Value="True"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding RecentFiles.Count}"
+                                        Value="0">
+                                    <Setter Property="IsEnabled"
+                                            Value="False"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </MenuItem.Style>
+                </MenuItem>
+                <Separator/>
                 <MenuItem Header="_Refresh"
                           Command="{Binding RefreshCommand}"
                           InputGestureText="F5"
@@ -87,6 +117,15 @@
                           IsChecked="{Binding ShowMessage}"
                           AutomationProperties.Name="Show Message Column"
                           AutomationProperties.HelpText="Toggle visibility of the message column"/>
+                <Separator/>
+                <MenuItem Header="Save Column _Layout"
+                          Command="{Binding SaveColumnLayoutCommand}"
+                          AutomationProperties.Name="Save Column Layout"
+                          AutomationProperties.HelpText="Save the current column order and visibility for future sessions"/>
+                <MenuItem Header="_Reset Column Layout"
+                          Command="{Binding ResetColumnLayoutCommand}"
+                          AutomationProperties.Name="Reset Column Layout"
+                          AutomationProperties.HelpText="Reset column order and visibility to default settings"/>
             </MenuItem>
         </Menu>
 
@@ -189,8 +228,9 @@
                                      SelectionMode="Extended"
                                      GridLinesVisibility="Horizontal"
                                      AlternatingRowBackground="#F9F9F9"
+                                     behaviors:ColumnReorderBehavior.IsEnabled="True"
                                      AutomationProperties.Name="Log Entries Data Grid"
-                                     AutomationProperties.HelpText="Displays filtered log entries. Use arrow keys to navigate, Tab to move between columns.">
+                                     AutomationProperties.HelpText="Displays filtered log entries. Use arrow keys to navigate, Tab to move between columns. Right-click column headers or press Shift+F10 to rearrange columns.">
 
             <controls:AccessibleDataGrid.Columns>
                 <DataGridTextColumn Header="Timestamp"

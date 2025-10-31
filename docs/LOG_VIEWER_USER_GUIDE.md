@@ -97,11 +97,54 @@ Control which columns are displayed using the **View** menu:
 - ✓ Show Thread ID (default: visible)
 - ✓ Show Context (default: visible)
 - ✓ Show Message (default: visible)
+- Save Column Layout (saves current order and visibility)
+- Reset Column Layout (restores defaults)
 
 **Example Scenarios**:
 - Hide **Thread ID** and **Context** for a simpler view when analyzing single-threaded operations
 - Show only **Timestamp**, **Level**, and **Message** for a compact error summary
 - Hide **Module** when analyzing operations you know are all from the same function
+
+### Column Rearrangement
+
+Customize the order of columns to match your workflow preferences. The application remembers your column order across sessions.
+
+#### Using the Mouse
+1. **Right-click** on any column header
+2. Select from the context menu:
+   - **Move Left**: Shifts the column one position to the left
+   - **Move Right**: Shifts the column one position to the right
+   - **Reset Column Order**: Restores all columns to default positions
+
+#### Using the Keyboard (Fully Accessible)
+1. Press **Tab** repeatedly to navigate to a column header
+2. Press **Shift+F10** or the **Context Menu key** to open the menu
+3. Use **Arrow keys** to navigate menu items
+4. Press **Enter** to select an option
+
+**Keyboard Shortcuts**:
+- **Ctrl+Shift+Left Arrow**: Move focused column left
+- **Ctrl+Shift+Right Arrow**: Move focused column right
+
+#### Screen Reader Support
+When you rearrange columns:
+- Screen readers announce the movement: "Level column moved right from position 2 to position 3"
+- Row data is automatically read in the new column order
+- Only visible columns are included in announcements
+- Column headers include help text about keyboard shortcuts
+
+#### Saving Your Layout
+- Column order is **automatically saved** when you make changes
+- Settings persist in: `%APPDATA%\AutopilotLogViewer\ColumnSettings.json`
+- Use **View > Save Column Layout** to manually save at any time
+- Use **View > Reset Column Layout** to restore defaults
+
+**Example Use Cases**:
+- Move **Level** to the first position to prioritize severity
+- Place **Module** after **Message** for better message readability
+- Arrange columns to match your organization's log analysis guidelines
+
+For detailed information, see [Column Rearrangement Documentation](COLUMN_REARRANGEMENT.md).
 
 ### DataGrid Navigation
 
@@ -129,6 +172,13 @@ When using JAWS or NVDA:
 
 **File > Open Log File... (Ctrl+O)**  
 Opens a file dialog to select a log file for viewing.
+
+**File > Open Recent**  
+Shows a list of up to 10 recently opened log files for quick access.  
+- Recently opened files appear in most-recent-first order
+- Click any file to open it immediately
+- Files that no longer exist are automatically removed from the list
+- The list persists across application sessions
 
 **File > Refresh (F5)**  
 Reloads the current log file from disk (useful for viewing updated logs).
@@ -169,9 +219,9 @@ The Log Viewer automatically detects which format is used and parses accordingly
 
 **Problem**: Clicking "View Logs" shows an error  
 **Solution**: Ensure the LogViewer is built:
-```powershell
-cd C:\Path\To\Autopilot
-.\Build-NativeDlls.ps1 -Configuration Release
+```batch
+cd C:\Path\To\AutopilotLogViewer
+build.bat
 ```
 
 **Expected Output**: `bin\Release\net9.0-windows\AutopilotLogViewer.exe`

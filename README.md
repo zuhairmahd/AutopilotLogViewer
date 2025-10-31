@@ -36,22 +36,15 @@ The **Autopilot Log Viewer** is a high-performance desktop application designed 
 #### Prerequisites
 - [.NET 9.0 SDK](https://dotnet.microsoft.com/download/dotnet/9.0) or higher
 - Windows 10 1809+ or Windows 11
-- PowerShell 5.1 or PowerShell 7+
 
 #### Build Commands
-```powershell
+```batch
 # Clone the repository
 git clone https://github.com/yourusername/AutopilotLogViewer.git
 cd AutopilotLogViewer
 
 # Build the application (Release configuration)
-.\Build-LogViewer.ps1 -Configuration Release
-
-# Build with verbose output
-.\Build-LogViewer.ps1 -Configuration Release -Verbose
-
-# Clean and rebuild
-.\Build-LogViewer.ps1 -Clean -Configuration Release
+build.bat
 ```
 
 #### Build Output
@@ -193,12 +186,9 @@ AutopilotLogViewer/
 ## Development
 
 ### Building for Development
-```powershell
-# Debug build with verbose output
-.\Build-LogViewer.ps1 -Configuration Debug -Verbose
-
-# Clean build
-.\Build-LogViewer.ps1 -Clean -Configuration Debug
+```batch
+# Release build (default)
+build.bat
 ```
 
 ### Project Dependencies

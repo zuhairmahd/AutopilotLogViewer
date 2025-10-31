@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Windows.Input;
 using Autopilot.LogViewer.Core.Models;
 using Autopilot.LogViewer.Core.Parsers;
+using Autopilot.LogViewer.UI.Helpers;
 
 namespace Autopilot.LogViewer.UI.ViewModels
 {
@@ -31,6 +33,13 @@ namespace Autopilot.LogViewer.UI.ViewModels
         private bool _showContext = true;
         private bool _showMessage = true;
 
+        // Column order settings
+        private Dictionary<string, int> _columnDisplayIndices = new();
+
+        // Recent files
+        private const int MaxRecentFiles = 10;
+        private ObservableCollection<string> _recentFiles = new();
+
         /// <summary>
         /// Initializes a new instance of the MainViewModel class.
         /// </summary>
@@ -40,6 +49,14 @@ namespace Autopilot.LogViewer.UI.ViewModels
             OpenFileCommand = new RelayCommand(_ => OpenFile());
             RefreshCommand = new RelayCommand(_ => RefreshLog(), _ => !string.IsNullOrEmpty(FilePath));
             ClearFiltersCommand = new RelayCommand(_ => ClearFilters());
+            SaveColumnLayoutCommand = new RelayCommand(_ => SaveColumnLayout());
+            ResetColumnLayoutCommand = new RelayCommand(_ => ResetColumnLayout());
+
+            // Load saved column settings
+            LoadColumnSettings();
+
+            // Load recent files
+            LoadRecentFiles();
 
             // Initialize available levels
             AvailableLevels = new ObservableCollection<string>
@@ -198,6 +215,34 @@ namespace Autopilot.LogViewer.UI.ViewModels
         public ICommand OpenFileCommand { get; }
         public ICommand RefreshCommand { get; }
         public ICommand ClearFiltersCommand { get; }
+        public ICommand SaveColumnLayoutCommand { get; }
+        public ICommand ResetColumnLayoutCommand { get; }
+        public ICommand OpenRecentFileCommand => new RelayCommand(param => OpenRecentFile(param as string));
+
+        #endregion
+
+        #region Recent Files
+
+        /// <summary>
+        /// Gets the list of recently opened files.
+        /// </summary>
+        public ObservableCollection<string> RecentFiles
+        {
+            get => _recentFiles;
+            private set => SetProperty(ref _recentFiles, value);
+        }
+
+        #endregion
+
+        #region Public Properties for Column Order
+
+        /// <summary>
+        /// Gets the display index for a column by header name.
+        /// </summary>
+        public int GetColumnDisplayIndex(string header)
+        {
+            return _columnDisplayIndices.TryGetValue(header, out var index) ? index : -1;
+        }
 
         #endregion
 
@@ -214,7 +259,55 @@ namespace Autopilot.LogViewer.UI.ViewModels
             if (dialog.ShowDialog() == true)
             {
                 FilePath = dialog.FileName;
+                AddToRecentFiles(dialog.FileName);
             }
+        }
+
+        private void OpenRecentFile(string? filePath)
+        {
+            if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
+            {
+                FilePath = filePath;
+                AddToRecentFiles(filePath);
+            }
+            else if (!string.IsNullOrEmpty(filePath))
+            {
+                StatusText = $"File not found: {filePath}";
+                // Remove from recent files
+                RecentFiles.Remove(filePath);
+                SaveRecentFilesInternal();
+            }
+        }
+
+        private void AddToRecentFiles(string filePath)
+        {
+            // Remove if already exists
+            if (RecentFiles.Contains(filePath))
+            {
+                RecentFiles.Remove(filePath);
+            }
+
+            // Add to top
+            RecentFiles.Insert(0, filePath);
+
+            // Limit to MaxRecentFiles
+            while (RecentFiles.Count > MaxRecentFiles)
+            {
+                RecentFiles.RemoveAt(RecentFiles.Count - 1);
+            }
+
+            SaveRecentFilesInternal();
+        }
+
+        private void LoadRecentFiles()
+        {
+            var files = ColumnSettings.LoadRecentFiles();
+            RecentFiles = new ObservableCollection<string>(files.Take(MaxRecentFiles));
+        }
+
+        private void SaveRecentFilesInternal()
+        {
+            ColumnSettings.SaveRecentFiles(RecentFiles.ToList());
         }
 
         private void LoadLogFile()
@@ -310,6 +403,86 @@ namespace Autopilot.LogViewer.UI.ViewModels
             SelectedLevel = "All";
             SelectedModule = "All";
         }
+
+        private void LoadColumnSettings()
+        {
+            var settings = ColumnSettings.Load();
+            if (settings != null && settings.Count > 0)
+            {
+                // Apply loaded settings
+                foreach (var setting in settings)
+                {
+                    _columnDisplayIndices[setting.Header] = setting.DisplayIndex;
+
+                    // Apply visibility settings
+                    switch (setting.Header)
+                    {
+                        case "Timestamp":
+                            ShowTimestamp = setting.IsVisible;
+                            break;
+                        case "Level":
+                            ShowLevel = setting.IsVisible;
+                            break;
+                        case "Module":
+                            ShowModule = setting.IsVisible;
+                            break;
+                        case "Thread":
+                            ShowThreadId = setting.IsVisible;
+                            break;
+                        case "Context":
+                            ShowContext = setting.IsVisible;
+                            break;
+                        case "Message":
+                            ShowMessage = setting.IsVisible;
+                            break;
+                    }
+                }
+            }
+            else
+            {
+                // Use defaults
+                ResetColumnLayout();
+            }
+        }
+
+        private void SaveColumnLayout()
+        {
+            // This will be called by the view when column order changes
+            // Settings are saved automatically by ColumnReorderBehavior
+            StatusText = "Column layout saved";
+        }
+
+        private void ResetColumnLayout()
+        {
+            var defaults = ColumnSettings.GetDefaults();
+            _columnDisplayIndices.Clear();
+
+            foreach (var setting in defaults)
+            {
+                _columnDisplayIndices[setting.Header] = setting.DisplayIndex;
+            }
+
+            // Reset visibility to defaults
+            ShowTimestamp = true;
+            ShowLevel = true;
+            ShowModule = true;
+            ShowThreadId = true;
+            ShowContext = true;
+            ShowMessage = true;
+
+            // Save the reset layout
+            ColumnSettings.Save(defaults);
+
+            // Trigger the reset event for the view
+            ColumnLayoutReset?.Invoke(this, EventArgs.Empty);
+
+            StatusText = "Column layout reset to defaults";
+        }
+
+        /// <summary>
+        /// Event raised when column layout is reset to notify the view.
+        /// </summary>
+        public event EventHandler? ColumnLayoutReset;
 
         #endregion
     }

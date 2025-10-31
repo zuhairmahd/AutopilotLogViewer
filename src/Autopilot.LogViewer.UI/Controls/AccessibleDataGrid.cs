@@ -1,10 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Linq;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace Autopilot.LogViewer.UI.Controls
 {
@@ -14,54 +18,159 @@ namespace Autopilot.LogViewer.UI.Controls
     /// </summary>
     public class AccessibleDataGrid : DataGrid
     {
-        /// <summary>
-        /// Initializes a new instance of the AccessibleDataGrid class.
-        /// </summary>
+        private static readonly DependencyProperty HandlersAttachedProperty =
+            DependencyProperty.RegisterAttached(
+                "HandlersAttached",
+                typeof(bool),
+                typeof(AccessibleDataGrid),
+                new PropertyMetadata(false));
+
         public AccessibleDataGrid()
         {
-            Loaded += OnLoaded;
             LoadingRow += OnLoadingRow;
-            // Update row accessible names when columns change (hide/show or reorder)
-            this.Columns.CollectionChanged += OnColumnsCollectionChanged;
+            Columns.CollectionChanged += OnColumnsCollectionChanged;
+            Loaded += OnGridLoaded;
+            KeyDown += OnKeyDown;
         }
 
-        private void OnLoaded(object sender, RoutedEventArgs e)
+        private void OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
-            // Ensure DisplayIndex is stable
-            EnsureDisplayIndices();
-        }
-
-        private void EnsureDisplayIndices()
-        {
-            // Force columns to maintain their declaration order
-            for (int i = 0; i < Columns.Count; i++)
+            // F5 hotkey for manual UI Automation refresh
+            if (e.Key == System.Windows.Input.Key.F5)
             {
-                if (Columns[i].DisplayIndex != i)
-                {
-                    Columns[i].DisplayIndex = i;
-                }
+                RefreshUIAutomation();
+                e.Handled = true;
             }
         }
 
-        private void OnLoadingRow(object? sender, DataGridRowEventArgs e)
+        /// <summary>
+        /// Force a complete UI Automation tree refresh for the DataGrid.
+        /// Called by F5 hotkey or programmatically after major structural changes.
+        /// </summary>
+        public void RefreshUIAutomation()
         {
-            // Build an accessible name for the row that includes only VISIBLE columns
-            UpdateRowAccessibleName(e.Row);
+            UpdateLayout();
+            InvalidateHeaderPeers();
+            UpdateHeaderAutomationProperties();
+            UpdateAllRowAccessibleNames();
+            UpdateAllCellAutomationNames();
+
+            // Deferred pass to catch any late-realized elements
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                InvalidateHeaderPeers();
+                UpdateHeaderAutomationProperties();
+                UpdateAllRowAccessibleNames();
+                UpdateAllCellAutomationNames();
+            }), DispatcherPriority.Background);
+        }
+
+        /// <summary>
+        /// Ensure rows use AccessibleDataGridRow so our custom automation peer is active.
+        /// </summary>
+        /// <returns>A custom DataGridRow container.</returns>
+        protected override System.Windows.DependencyObject GetContainerForItemOverride()
+        {
+            return new AccessibleDataGridRow();
+        }
+
+        private void OnGridLoaded(object sender, RoutedEventArgs e)
+        {
+            AttachColumnPropertyHandlers();
+            UpdateAllRowAccessibleNames();
+            UpdateAllCellAutomationNames();
+            UpdateHeaderAutomationProperties();
         }
 
         private void OnColumnsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
-            // Columns were added/removed/reordered — update accessible names for realized rows
+            AttachColumnPropertyHandlers(e.NewItems);
             UpdateAllRowAccessibleNames();
+            UpdateAllCellAutomationNames();
+            UpdateHeaderAutomationProperties();
+        }
+
+        private void OnLoadingRow(object? sender, DataGridRowEventArgs e)
+        {
+            UpdateRowAccessibleName(e.Row);
+            UpdateRowCellAutomationNames(e.Row);
+        }
+
+        private void OnColumnDisplayIndexChanged(object? sender, EventArgs e)
+        {
+            UpdateLayout();
+            InvalidateHeaderPeers();
+            UpdateAllRowAccessibleNames();
+            UpdateAllCellAutomationNames();
+            UpdateHeaderAutomationProperties();
+
+            // Defer a second pass until after layout so newly realized cells get automation metadata
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                InvalidateHeaderPeers();
+                UpdateAllRowAccessibleNames();
+                UpdateAllCellAutomationNames();
+                UpdateHeaderAutomationProperties();
+            }), DispatcherPriority.Background);
+        }
+
+        private void OnColumnVisibilityChanged(object? sender, EventArgs e)
+        {
+            UpdateLayout();
+            InvalidateHeaderPeers();
+            UpdateAllRowAccessibleNames();
+            UpdateAllCellAutomationNames();
+            UpdateHeaderAutomationProperties();
+
+            // Defer a second pass until after layout so newly realized cells get automation metadata
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                InvalidateHeaderPeers();
+                UpdateAllRowAccessibleNames();
+                UpdateAllCellAutomationNames();
+                UpdateHeaderAutomationProperties();
+            }), DispatcherPriority.Background);
+        }
+
+        private void AttachColumnPropertyHandlers(System.Collections.IList? columns = null)
+        {
+            var targetColumns = columns ?? Columns;
+            foreach (DataGridColumn column in targetColumns)
+            {
+                if (GetHandlersAttached(column))
+                {
+                    continue;
+                }
+
+                var displayDescriptor = DependencyPropertyDescriptor.FromProperty(
+                    DataGridColumn.DisplayIndexProperty,
+                    typeof(DataGridColumn));
+                displayDescriptor?.AddValueChanged(column, OnColumnDisplayIndexChanged);
+
+                var visibilityDescriptor = DependencyPropertyDescriptor.FromProperty(
+                    DataGridColumn.VisibilityProperty,
+                    typeof(DataGridColumn));
+                visibilityDescriptor?.AddValueChanged(column, OnColumnVisibilityChanged);
+
+                SetHandlersAttached(column, true);
+            }
+        }
+
+        private static bool GetHandlersAttached(DependencyObject obj)
+        {
+            return (bool)obj.GetValue(HandlersAttachedProperty);
+        }
+
+        private static void SetHandlersAttached(DependencyObject obj, bool value)
+        {
+            obj.SetValue(HandlersAttachedProperty, value);
         }
 
         private void UpdateAllRowAccessibleNames()
         {
-            // Iterate realized item containers
             for (int i = 0; i < Items.Count; i++)
             {
-                var row = ItemContainerGenerator.ContainerFromIndex(i) as DataGridRow;
-                if (row != null)
+                if (ItemContainerGenerator.ContainerFromIndex(i) is DataGridRow row)
                 {
                     UpdateRowAccessibleName(row);
                 }
@@ -80,95 +189,123 @@ namespace Autopilot.LogViewer.UI.Controls
             }
             catch
             {
-                // Best-effort; never crash UI for accessibility adornments
+                // Accessibility adornments must not impact stability
             }
         }
 
         private string BuildRowAccessibleName(DataGridRow row)
         {
-            // Compose a string using visible columns only, in display order
-            // Pattern: "Timestamp: 2025-10-30 12:34:56.789; Level: Info; Module: Core; ..."
-            var parts = new System.Collections.Generic.List<string>(Columns.Count);
+            var visibleColumns = GetVisibleColumns();
+            var parts = new List<string>(visibleColumns.Count);
 
-            // Ensure we iterate by DisplayIndex order
-            foreach (var col in GetColumnsInDisplayOrder())
+            foreach (var column in visibleColumns)
             {
-                // Only handle text columns for now
-                if (col is DataGridTextColumn textCol)
+                // Get cell by actual column index, not display index
+                int columnIndex = Columns.IndexOf(column);
+                if (columnIndex < 0)
                 {
-                    string header = Convert.ToString(textCol.Header) ?? string.Empty;
-                    var cell = GetCell(row, col.DisplayIndex);
-                    string value = ExtractCellText(cell) ?? string.Empty;
-
-                    if (!string.IsNullOrWhiteSpace(value))
-                    {
-                        if (!string.IsNullOrWhiteSpace(header))
-                        {
-                            parts.Add($"{header}: {value}");
-                        }
-                        else
-                        {
-                            parts.Add(value);
-                        }
-                    }
+                    continue;
                 }
-                else
+
+                var cell = GetCell(row, columnIndex);
+                string value = ExtractCellText(cell) ?? string.Empty;
+
+                if (!string.IsNullOrWhiteSpace(value))
                 {
-                    // Fallback: try to read any text content
-                    var cell = GetCell(row, col.DisplayIndex);
-                    string? value = ExtractCellText(cell);
-                    if (!string.IsNullOrWhiteSpace(value))
-                    {
-                        parts.Add(value);
-                    }
+                    // Requirement: Do not report column titles in body rows; read only values
+                    parts.Add(value);
                 }
             }
 
             return string.Join("; ", parts);
         }
 
-        private static System.Collections.Generic.IEnumerable<DataGridColumn> GetColumnsInDisplayOrder(System.Collections.Generic.IList<DataGridColumn>? cols = null)
+        private void UpdateRowCellAutomationNames(DataGridRow row)
         {
-            cols ??= System.Array.Empty<DataGridColumn>();
-            // Use current grid instance's Columns if available
-            if (cols.Count == 0)
+            try
             {
-                // This method will be called with instance context; we will return empty if nothing passed
-                yield break;
+                var visibleColumns = GetVisibleColumns();
+                int totalVisible = visibleColumns.Count;
+
+                // Map each visible column to its 1-based position according to DisplayIndex
+                var positionByColumn = new Dictionary<DataGridColumn, int>(totalVisible);
+                for (int i = 0; i < visibleColumns.Count; i++)
+                {
+                    positionByColumn[visibleColumns[i]] = i + 1;
+                }
+
+                // Update all cells, including hidden ones
+                for (int columnIndex = 0; columnIndex < Columns.Count; columnIndex++)
+                {
+                    var column = Columns[columnIndex];
+                    var cell = GetCell(row, columnIndex);
+                    if (cell == null)
+                    {
+                        continue;
+                    }
+
+                    bool isVisible = column.Visibility == Visibility.Visible;
+
+                    if (isVisible)
+                    {
+                        string value = ExtractCellText(cell) ?? string.Empty;
+                        int position = positionByColumn.TryGetValue(column, out var pos) ? pos : 0;
+
+                        // Requirement: For body cells, announce only the value (no header)
+                        AutomationProperties.SetName(cell, value);
+                        AutomationProperties.SetPositionInSet(cell, position);
+                        AutomationProperties.SetSizeOfSet(cell, totalVisible);
+                    }
+                    else
+                    {
+                        // Clear automation properties for hidden cells
+                        AutomationProperties.SetName(cell, string.Empty);
+                        AutomationProperties.SetPositionInSet(cell, 0);
+                        AutomationProperties.SetSizeOfSet(cell, 0);
+                    }
+                }
             }
-            foreach (var c in System.Linq.Enumerable.OrderBy(cols, c => c.DisplayIndex))
+            catch
             {
-                yield return c;
+                // Accessibility adornments must not impact stability
             }
         }
 
-        private System.Collections.Generic.IEnumerable<DataGridColumn> GetColumnsInDisplayOrder()
+        private void UpdateAllCellAutomationNames()
         {
-            foreach (var c in System.Linq.Enumerable.OrderBy(this.Columns, c => c.DisplayIndex))
+            for (int i = 0; i < Items.Count; i++)
             {
-                yield return c;
+                if (ItemContainerGenerator.ContainerFromIndex(i) is DataGridRow row)
+                {
+                    UpdateRowCellAutomationNames(row);
+                }
             }
         }
 
-        private static DataGridCell? GetCell(DataGridRow row, int displayIndex)
+        private DataGridCell? GetCell(DataGridRow row, int columnIndex)
         {
             var presenter = FindVisualChild<DataGridCellsPresenter>(row);
-            if (presenter == null) return null;
-            // Map display index to container index: they align in presenter
-            var cell = presenter.ItemContainerGenerator.ContainerFromIndex(displayIndex) as DataGridCell;
-            return cell;
+            return presenter?.ItemContainerGenerator.ContainerFromIndex(columnIndex) as DataGridCell;
         }
 
         private static string? ExtractCellText(DataGridCell? cell)
         {
-            if (cell == null) return null;
-            var textBlock = FindVisualChild<System.Windows.Controls.TextBlock>(cell);
+            if (cell == null)
+            {
+                return null;
+            }
+
+            var textBlock = FindVisualChild<TextBlock>(cell);
             return textBlock?.Text;
         }
 
         private static TChild? FindVisualChild<TChild>(DependencyObject? parent) where TChild : DependencyObject
         {
-            if (parent == null) return null;
+            if (parent == null)
+            {
+                return null;
+            }
+
             int count = VisualTreeHelper.GetChildrenCount(parent);
             for (int i = 0; i < count; i++)
             {
@@ -177,10 +314,135 @@ namespace Autopilot.LogViewer.UI.Controls
                 {
                     return wanted;
                 }
+
                 var result = FindVisualChild<TChild>(child);
-                if (result != null) return result;
+                if (result != null)
+                {
+                    return result;
+                }
             }
+
             return null;
+        }
+
+        private static IEnumerable<TChild> FindVisualChildren<TChild>(DependencyObject? parent) where TChild : DependencyObject
+        {
+            if (parent == null)
+            {
+                yield break;
+            }
+
+            int count = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is TChild wanted)
+                {
+                    yield return wanted;
+                }
+
+                foreach (var grand in FindVisualChildren<TChild>(child))
+                {
+                    yield return grand;
+                }
+            }
+        }
+
+        private void InvalidateHeaderPeers()
+        {
+            try
+            {
+                var headersPresenter = FindVisualChild<DataGridColumnHeadersPresenter>(this);
+                if (headersPresenter == null)
+                {
+                    return;
+                }
+
+                // Force peer refresh by calling InvalidatePeer on each header
+                var headerContainers = FindVisualChildren<DataGridColumnHeader>(headersPresenter).ToList();
+                foreach (var header in headerContainers)
+                {
+                    var peer = System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(header);
+                    if (peer != null)
+                    {
+                        peer.InvalidatePeer();
+                    }
+                }
+            }
+            catch
+            {
+                // Do not allow accessibility updates to break UX
+            }
+        }
+
+        private void UpdateHeaderAutomationProperties()
+        {
+            try
+            {
+                var headersPresenter = FindVisualChild<DataGridColumnHeadersPresenter>(this);
+                if (headersPresenter == null)
+                {
+                    return;
+                }
+
+                var visibleColumns = GetVisibleColumns();
+                int totalVisible = visibleColumns.Count;
+                if (totalVisible == 0)
+                {
+                    return;
+                }
+
+                // Map visible columns to 1-based positions in visual order
+                var positionByColumn = new Dictionary<DataGridColumn, int>(totalVisible);
+                for (int i = 0; i < visibleColumns.Count; i++)
+                {
+                    positionByColumn[visibleColumns[i]] = i + 1;
+                }
+
+                // Collect all header containers
+                var headerContainers = FindVisualChildren<DataGridColumnHeader>(headersPresenter).ToList();
+
+                // Update each header's UIA position according to its column's position
+                foreach (var header in headerContainers)
+                {
+                    var column = header.Column;
+                    if (column == null)
+                    {
+                        continue;
+                    }
+
+                    if (positionByColumn.TryGetValue(column, out int position))
+                    {
+                        AutomationProperties.SetPositionInSet(header, position);
+                        AutomationProperties.SetSizeOfSet(header, totalVisible);
+                    }
+                    else
+                    {
+                        // Header for hidden columns should have no index
+                        AutomationProperties.SetPositionInSet(header, 0);
+                        AutomationProperties.SetSizeOfSet(header, 0);
+                    }
+                }
+            }
+            catch
+            {
+                // Do not allow accessibility updates to break UX
+            }
+        }
+
+        private List<DataGridColumn> GetVisibleColumns()
+        {
+            var visibleColumns = new List<DataGridColumn>();
+            foreach (var column in Columns)
+            {
+                if (column.Visibility == Visibility.Visible)
+                {
+                    visibleColumns.Add(column);
+                }
+            }
+
+            visibleColumns.Sort((a, b) => a.DisplayIndex.CompareTo(b.DisplayIndex));
+            return visibleColumns;
         }
     }
 }
