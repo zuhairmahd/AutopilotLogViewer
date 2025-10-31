@@ -133,5 +133,10 @@ namespace Autopilot.LogViewer.UI.Views
             }
             return null;
         }
+
+        private void LogDataGrid_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+
+        }
     }
 }

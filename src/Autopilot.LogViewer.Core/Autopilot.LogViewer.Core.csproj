@@ -9,6 +9,7 @@
     <Product>Autopilot Log Viewer</Product>
     <Description>Core library for parsing and filtering Autopilot log files</Description>
     <Copyright>Copyright © 2025</Copyright>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
   <ItemGroup>

@@ -10,6 +10,7 @@
     <Version>1.0.0</Version>
     <Authors>Windows Autopilot Management Tool Team</Authors>
     <Description>High-performance logging engine for Autopilot with async operations and CMTrace format support</Description>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
 </Project>
