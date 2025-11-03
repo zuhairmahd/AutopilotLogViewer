@@ -27,6 +27,11 @@
                               Data="{Binding}"/>
     </Window.Resources>
 
+    <Window.InputBindings>
+        <KeyBinding Key="F5"
+                    Command="{Binding RefreshCommand}"/>
+    </Window.InputBindings>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
